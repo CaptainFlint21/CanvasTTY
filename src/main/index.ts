@@ -9,6 +9,23 @@ import { augmentCliPath } from "./services/cliEnvironment";
 import { PluginManager } from "./services/PluginManager";
 import { PluginMediaService } from "./services/PluginMediaService";
 import { BrowserService } from "./services/BrowserService";
+import { runBrowserElectronSmoke } from "./services/browser/BrowserElectronSmoke";
+import {
+  runProviderElectronSmoke,
+  type ProviderSmokeTarget
+} from "./services/browser/ProviderElectronSmoke";
+import {
+  AgentBrowserBridge,
+  AgentGateway,
+  WINDOWS_PIPE_HOST_FILENAME,
+  WINDOWS_AGENT_GATEWAY_UNAVAILABLE,
+  supportsAgentGatewayPlatform
+} from "./services/agent-browser";
+import {
+  recoverKimiConfigurationOnStartup,
+  resolveKimiHomeDirectory
+} from "./services/agent-browser/ProviderLaunch";
+import type { StdioHelperLaunch } from "./services/agent-browser/ProviderLaunch";
 import { startupPageUrl } from "./startupPage";
 
 protocol.registerSchemesAsPrivileged([
@@ -34,15 +51,27 @@ protocol.registerSchemesAsPrivileged([
   }
 ]);
 
+// macOS native occlusion can defer a child WebContentsView's CDP input ACK for
+// several seconds even when that view disables renderer background throttling.
+// Agent-controlled tabs must remain responsive while the canvas is covered.
+if (process.platform === "darwin") {
+  app.commandLine.appendSwitch("disable-backgrounding-occluded-windows");
+}
+
 let mainWindow: BrowserWindow | null = null;
 let terminalManager: TerminalManager | null = null;
 let limitsService: LimitsService | null = null;
 let pluginManager: PluginManager | null = null;
 let pluginMediaService: PluginMediaService | null = null;
 let browserService: BrowserService | null = null;
+let agentGateway: AgentGateway | null = null;
+let agentBrowserBridge: AgentBrowserBridge | null = null;
+let agentBrowserHelper: StdioHelperLaunch | null = null;
 const pluginWindows = new Map<BrowserWindow, string>();
 let servicesReady = false;
 let startupRunning = false;
+let shutdownRunning = false;
+let shutdownComplete = false;
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 if (!hasSingleInstanceLock) app.quit();
@@ -81,14 +110,58 @@ async function createWindow(): Promise<BrowserWindow> {
 
 async function initializeServices(): Promise<void> {
   augmentCliPath();
-  const settings = new SettingsStore(app.getPath("userData"), app.getLocale());
+  // Recovery is independent of gateway availability: an interrupted Kimi fallback
+  // must be restored before any new terminal can launch, including on Windows.
+  const kimiHomeDirectory = resolveKimiHomeDirectory();
+  recoverKimiConfigurationOnStartup(kimiHomeDirectory);
+  const userDataPath = app.getPath("userData");
+  const settings = new SettingsStore(userDataPath, app.getLocale());
   await settings.load();
+
+  browserService = new BrowserService(() => mainWindow, {
+    userDataPath,
+    restoreTabs: settings.get().browserRestoreTabs,
+    ...(process.env.CANVASTTY_BROWSER_SMOKE_URL
+      ? { downloadRoot: join(userDataPath, "browser-smoke-downloads") }
+      : {})
+  });
+  await browserService.ready();
+
+  if (supportsAgentGatewayPlatform()) {
+    const runtimeDirectory = join(userDataPath, "browser", "runtime");
+    const windowsHostPath = process.platform === "win32"
+      ? app.isPackaged
+        ? join(process.resourcesPath, "agent-browser", WINDOWS_PIPE_HOST_FILENAME)
+        : join(app.getAppPath(), "build", "windows-agent-pipe-host", WINDOWS_PIPE_HOST_FILENAME)
+      : undefined;
+    agentGateway = new AgentGateway(browserService.core, { runtimeDirectory, windowsHostPath });
+    agentGateway.setEnabled(settings.get().browserAgentAccess);
+    await agentGateway.start();
+    const helperPath = app.isPackaged
+      ? join(process.resourcesPath, "agent-browser", "mcp-helper.mjs")
+      : join(app.getAppPath(), "src", "agent-browser", "mcp-helper.mjs");
+    agentBrowserHelper = {
+      command: process.execPath,
+      args: [helperPath],
+      env: { ELECTRON_RUN_AS_NODE: "1" }
+    };
+    agentBrowserBridge = new AgentBrowserBridge(agentGateway, {
+      helper: agentBrowserHelper,
+      runtimeDirectory,
+      kimiHomeDirectory,
+      ...(process.env.CANVASTTY_PROVIDER_SMOKE_KIMI_COMMAND
+        ? { kimiCommand: process.env.CANVASTTY_PROVIDER_SMOKE_KIMI_COMMAND }
+        : {})
+    });
+  } else {
+    console.warn(WINDOWS_AGENT_GATEWAY_UNAVAILABLE);
+  }
 
   terminalManager = new TerminalManager((channel, payload) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send(channel, payload);
     }
-  });
+  }, agentBrowserBridge ?? undefined);
   limitsService = new LimitsService(app.getVersion());
   pluginManager = new PluginManager(app.getPath("userData"));
   await pluginManager.load();
@@ -97,7 +170,6 @@ async function initializeServices(): Promise<void> {
     (pluginId, permission) => pluginManager!.assertPermission(pluginId, permission)
   );
   await pluginMediaService.load();
-  browserService = new BrowserService(() => mainWindow);
   protocol.handle("canvastty-plugin", (request) => pluginManager!.protocolResponse(request.url));
   protocol.handle("canvastty-media", (request) => pluginMediaService!.protocolResponse(request));
   registerIpc({
@@ -107,6 +179,11 @@ async function initializeServices(): Promise<void> {
     plugins: pluginManager,
     pluginMedia: pluginMediaService,
     browser: browserService,
+    getMainWindow: () => mainWindow,
+    applyBrowserSettings: (next) => {
+      agentBrowserBridge?.setEnabled(next.browserAgentAccess);
+      browserService?.setRestoreTabs(next.browserRestoreTabs);
+    },
     openPluginWindow,
     closePluginWindows,
     requestPluginLauncher
@@ -128,6 +205,47 @@ async function loadApplication(window: BrowserWindow): Promise<void> {
     console.log("CANVASTTY_SMOKE_READY");
     app.quit();
   }
+  const browserSmokeUrl = process.env.CANVASTTY_BROWSER_SMOKE_URL;
+  if (browserSmokeUrl && browserService) {
+    await runBrowserElectronSmoke(browserService, browserSmokeUrl, app.getPath("userData"));
+    console.log("CANVASTTY_BROWSER_SMOKE_READY");
+    app.quit();
+  }
+  const providerSmoke = process.env.CANVASTTY_PROVIDER_SMOKE;
+  if (providerSmoke) {
+    if (!agentBrowserBridge || !agentBrowserHelper) {
+      throw new Error("Provider smoke requires the local agent browser gateway.");
+    }
+    const targets = parseProviderSmokeTargets(providerSmoke);
+    await runProviderElectronSmoke({
+      bridge: agentBrowserBridge,
+      helper: agentBrowserHelper,
+      cwd: process.env.CANVASTTY_PROVIDER_SMOKE_CWD || app.getPath("temp"),
+      targets,
+      commands: {
+        ...(process.env.CANVASTTY_PROVIDER_SMOKE_KIMI_COMMAND
+          ? { kimi: process.env.CANVASTTY_PROVIDER_SMOKE_KIMI_COMMAND }
+          : {}),
+        ...(process.env.CANVASTTY_PROVIDER_SMOKE_CLAUDE_COMMAND
+          ? { claude: process.env.CANVASTTY_PROVIDER_SMOKE_CLAUDE_COMMAND }
+          : {}),
+        ...(process.env.CANVASTTY_PROVIDER_SMOKE_CODEX_COMMAND
+          ? { codex: process.env.CANVASTTY_PROVIDER_SMOKE_CODEX_COMMAND }
+          : {})
+      }
+    });
+    console.log("CANVASTTY_PROVIDER_SMOKE_READY");
+    app.quit();
+  }
+}
+
+function parseProviderSmokeTargets(value: string): ProviderSmokeTarget[] {
+  const allowed = new Set<ProviderSmokeTarget>(["direct", "claude", "codex", "kimi"]);
+  const targets = value.split(",").map((target) => target.trim()).filter(Boolean);
+  if (targets.length === 0 || targets.some((target) => !allowed.has(target as ProviderSmokeTarget))) {
+    throw new Error("CANVASTTY_PROVIDER_SMOKE contains an unsupported target.");
+  }
+  return targets as ProviderSmokeTarget[];
 }
 
 async function startApplication(): Promise<void> {
@@ -190,11 +308,15 @@ if (hasSingleInstanceLock) {
   });
 }
 
-app.on("before-quit", () => {
-  void browserService?.close();
-  limitsService?.dispose();
-  terminalManager?.disposeAll();
-  void pluginManager?.dispose();
+app.on("before-quit", (event) => {
+  if (shutdownComplete) return;
+  event.preventDefault();
+  if (shutdownRunning) return;
+  shutdownRunning = true;
+  void shutdownServices().finally(() => {
+    shutdownComplete = true;
+    app.quit();
+  });
 });
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
@@ -202,6 +324,14 @@ app.on("window-all-closed", () => {
 
 // Keep shared event names in the main bundle so accidental channel drift fails at build time.
 void IPC.terminalData;
+
+async function shutdownServices(): Promise<void> {
+  terminalManager?.disposeAll();
+  limitsService?.dispose();
+  if (agentGateway) await Promise.allSettled([agentGateway.close()]);
+  if (browserService) await Promise.allSettled([browserService.dispose()]);
+  if (pluginManager) await Promise.allSettled([pluginManager.dispose()]);
+}
 
 async function openPluginWindow(pluginId: string, contributionId: string): Promise<void> {
   if (!pluginManager) throw new Error("Plugin manager is not ready.");

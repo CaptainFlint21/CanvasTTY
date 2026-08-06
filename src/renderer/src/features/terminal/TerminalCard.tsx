@@ -38,6 +38,7 @@ interface TerminalCardProps {
   hoverFocus: boolean;
   hoverFocusSpeed: EdgePanSpeed;
   invertTerminalWheel: boolean;
+  zoomOverApplications: boolean;
   selected: boolean;
   renaming: boolean;
   snapTargets: readonly SessionBounds[];
@@ -79,6 +80,7 @@ export function TerminalCard({
   hoverFocus,
   hoverFocusSpeed,
   invertTerminalWheel,
+  zoomOverApplications,
   selected,
   renaming,
   snapTargets,
@@ -100,6 +102,8 @@ export function TerminalCard({
   const suppressFocusReport = useRef(false);
   const invertTerminalWheelRef = useRef(invertTerminalWheel);
   invertTerminalWheelRef.current = invertTerminalWheel;
+  const zoomOverApplicationsRef = useRef(zoomOverApplications);
+  zoomOverApplicationsRef.current = zoomOverApplications;
   const dragState = useRef<DragState | null>(null);
   const resizeState = useRef<ResizeState | null>(null);
   const [position, setPosition] = useState(session.position);
@@ -159,7 +163,11 @@ export function TerminalCard({
     });
     const screen = terminal.element?.querySelector<HTMLElement>(".xterm-screen");
     const detachMouseCoordinateAdapter = screen
-      ? attachTerminalMouseCoordinateAdapter(screen, () => invertTerminalWheelRef.current ? -1 : 1)
+      ? attachTerminalMouseCoordinateAdapter(
+        screen,
+        () => invertTerminalWheelRef.current ? -1 : 1,
+        () => zoomOverApplicationsRef.current
+      )
       : () => undefined;
     terminalRef.current = terminal;
     if (session.buffer) terminal.write(session.buffer);
@@ -380,6 +388,7 @@ export function TerminalCard({
     <article
       className={`terminal-card ${summaryMode ? "terminal-card--summary" : ""} ${selected ? "terminal-card--selected" : ""}`}
       data-interactive="true"
+      data-canvas-zoom-surface="application"
       data-wheel-owner={summaryMode ? undefined : "local"}
       tabIndex={-1}
       onPointerDownCapture={(event) => {

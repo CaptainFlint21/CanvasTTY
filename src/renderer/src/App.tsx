@@ -49,6 +49,7 @@ const FALLBACK_SETTINGS: AppSettings = {
   edgePan: false,
   edgePanSpeed: "normal",
   zoomSensitivity: "normal",
+  zoomOverApplications: false,
   focusActivation: "off",
   hoverFocus: false,
   hoverFocusSpeed: "normal",
@@ -61,7 +62,18 @@ const FALLBACK_SETTINGS: AppSettings = {
   homeGridSize: { ...DEFAULT_HOME_GRID_SIZE },
   homeLayout: structuredClone(DEFAULT_HOME_LAYOUT),
   pluginCanvas: [],
-  browserCanvas: null
+  browserCanvas: null,
+  browserAgentAccess: true,
+  browserRestoreTabs: true
+};
+
+const EMPTY_BROWSER_SNAPSHOT: BrowserSnapshot = {
+  tabs: [],
+  activeTabId: null,
+  visible: false,
+  agents: [],
+  downloads: [],
+  pendingDialog: null
 };
 
 export function App(): React.JSX.Element {
@@ -71,7 +83,7 @@ export function App(): React.JSX.Element {
   const [limitsLoadState, setLimitsLoadState] = useState<LimitsLoadState>("loading");
   const [mediaData, setMediaData] = useState<string | null>(null);
   const [plugins, setPlugins] = useState<InstalledPlugin[]>([]);
-  const [browser, setBrowser] = useState<BrowserSnapshot>({ tabs: [], activeTabId: null });
+  const [browser, setBrowser] = useState<BrowserSnapshot>(EMPTY_BROWSER_SNAPSHOT);
   const [camera, setCamera] = useState<CameraState>(() => homeCamera(DEFAULT_HOME_GRID_SIZE));
   const isHomeCamera = useRef(true);
   const [launchProvider, setLaunchProvider] = useState<AgentProviderId | null>(null);
@@ -320,7 +332,6 @@ export function App(): React.JSX.Element {
       const browserApi = window.canvasTTY.browser;
       if (!browserApi) return;
       await browserApi.close();
-      setBrowser({ tabs: [], activeTabId: null });
       await saveSettings({ browserCanvas: null });
     } catch (error) {
       showToast(error instanceof Error ? error.message : t(settings.locale, "browserActionFailed"));
@@ -597,6 +608,7 @@ export function App(): React.JSX.Element {
         open={settingsOpen}
         settings={settings}
         plugins={plugins}
+        browser={browser}
         onClose={() => setSettingsOpen(false)}
         onChange={saveSettings}
         onPreviewPlugin={previewPlugin}

@@ -16,6 +16,15 @@ files:
 asar: true
 asarUnpack:
   - node_modules/node-pty/**/*
+extraResources:
+  - from: src/agent-browser
+    to: agent-browser
+    filter:
+      - "*.mjs"
+  - from: agent/browser
+    to: agent/browser
+    filter:
+      - SKILL.md
 npmRebuild: true
 compression: normal
 artifactName: ${productName}-${version}-${os}-${arch}.${ext}
@@ -35,6 +44,9 @@ linux:
 
 win:
   icon: build/icon.png
+  extraResources:
+    - from: build/windows-agent-pipe-host/canvastty-windows-agent-pipe-host.exe
+      to: agent-browser/canvastty-windows-agent-pipe-host.exe
   target:
     - nsis
     - portable

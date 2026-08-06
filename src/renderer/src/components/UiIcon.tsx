@@ -32,6 +32,7 @@ export type UiIconName =
   | "reload"
   | "arrow"
   | "chevron"
+  | "download"
   | "plus"
   | "image-plus"
   | "trash"
@@ -59,6 +60,7 @@ const ICONS: Record<UiIconName, string> = {
   reload: workingIcon,
   arrow: arrowIcon,
   chevron: chevronIcon,
+  download: chevronIcon,
   plus: plusIcon,
   "image-plus": imagePlusIcon,
   trash: trashIcon,

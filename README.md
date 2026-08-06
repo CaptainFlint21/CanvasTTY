@@ -55,9 +55,11 @@ npm run dev
 
 CanvasTTY includes a permissioned runtime for ready-to-run static GitHub packages: HOME widgets, canvas apps, and separate sandboxed windows. The host SDK now supports persistent user-selected music-library grants, seekable local audio streams, and bounded playlist import/export for full player plugins. See the [authoring and security guide](docs/plugins.md), [manifest schema](docs/canvastty-plugin.schema.json), and [TypeScript SDK declarations](docs/plugin-api.d.ts).
 
-## Built-in browser scaffold
+## Built-in agent browser
 
-The source tree includes a core browser scaffold rather than a plugin capability: trusted React tab/navigation chrome backed by sandboxed Electron `WebContentsView` tabs in a separate persistent profile. It is intentionally not exposed from HOME yet. Website permissions, downloads, and agent browser automation remain future work; the current boundaries are documented in [Architecture](docs/ARCHITECTURE.md).
+CanvasTTY includes a core browser rather than a plugin capability: trusted React chrome backed by sandboxed Electron `WebContentsView` tabs in one persistent Chromium profile. It is available from HOME, restores safe HTTP(S) tabs, keeps website credentials inside Chromium, manages downloads/uploads, and exposes typed browser actions to Claude Code, Codex, and Kimi sessions launched by CanvasTTY.
+
+Agent access uses an authenticated local socket or named pipe and a bundled stdio MCP helper. It does not open a TCP or remote-debugging port and never exports cookies, passwords, auth headers, local storage, arbitrary JavaScript, or raw CDP. See [Architecture](docs/ARCHITECTURE.md) for the trust, audit, and concurrency boundaries.
 
 ## Quick checks
 

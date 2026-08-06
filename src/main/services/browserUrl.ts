@@ -15,8 +15,7 @@ export function normalizeBrowserInput(value: unknown): string {
 export function isAllowedBrowserUrl(value: string): boolean {
   try {
     const url = new URL(value);
-    return url.protocol === "https:"
-      || (url.protocol === "http:" && (url.hostname === "localhost" || url.hostname === "127.0.0.1"));
+    return url.protocol === "https:" || url.protocol === "http:";
   } catch {
     return false;
   }

@@ -93,6 +93,7 @@ export interface AppSettings {
   edgePan: boolean;
   edgePanSpeed: EdgePanSpeed;
   zoomSensitivity: ZoomSensitivity;
+  zoomOverApplications: boolean;
   focusActivation: FocusActivation;
   hoverFocus: boolean;
   hoverFocusSpeed: EdgePanSpeed;
@@ -106,6 +107,8 @@ export interface AppSettings {
   homeLayout: HomeWidgetPlacement[];
   pluginCanvas: PluginCanvasInstance[];
   browserCanvas: BrowserCanvasState | null;
+  browserAgentAccess: boolean;
+  browserRestoreTabs: boolean;
 }
 
 export interface CreateSessionRequest {
@@ -274,6 +277,61 @@ export interface BrowserViewportBounds extends Size {
   x: number;
   y: number;
   visible: boolean;
+  canvasScale?: number;
+  captureCanvasWheel?: boolean;
+}
+
+export type BrowserTabStatus = "loading" | "ready" | "error" | "crashed";
+export type BrowserConnectionState = "connected" | "stale";
+export type BrowserAgentProvider = AgentProviderId | "unknown";
+
+export const BROWSER_PROVIDER_COLORS: Record<BrowserAgentProvider, string> = {
+  claude: "#D97757",
+  codex: "#10A37F",
+  kimi: "#7C5CFC",
+  unknown: "#7A8291"
+};
+
+export interface AgentCursorSnapshot {
+  x: number;
+  y: number;
+  updatedAt: number;
+}
+
+export interface AgentPresenceSnapshot {
+  agentId: string;
+  connectionId: string;
+  provider: BrowserAgentProvider;
+  label: string;
+  brandColor: string;
+  terminalSessionId: string;
+  currentTabId: string | null;
+  cursor: AgentCursorSnapshot;
+  connectionState: BrowserConnectionState;
+  connectedAt: number;
+  lastHeartbeatAt: number;
+}
+
+export interface BrowserDialogSnapshot {
+  tabId: string;
+  type: "alert" | "confirm" | "prompt" | "beforeunload";
+  message: string;
+  defaultPrompt: string;
+  openedAt: number;
+}
+
+export type BrowserDownloadStatus = "pending" | "progressing" | "completed" | "canceled" | "interrupted";
+
+export interface BrowserDownloadSnapshot {
+  id: string;
+  tabId: string | null;
+  fileName: string;
+  savePath: string;
+  receivedBytes: number;
+  totalBytes: number;
+  status: BrowserDownloadStatus;
+  startedAt: number;
+  completedAt: number | null;
 }
 
 export interface BrowserTabSnapshot {
@@ -283,15 +341,190 @@ export interface BrowserTabSnapshot {
   loading: boolean;
   canGoBack: boolean;
   canGoForward: boolean;
+  documentRevision: number;
+  status: BrowserTabStatus;
+  favicon: string | null;
+  agents: AgentPresenceSnapshot[];
+  crashState: string | null;
 }
 
 export interface BrowserSnapshot {
   tabs: BrowserTabSnapshot[];
   activeTabId: string | null;
+  visible: boolean;
+  agents: AgentPresenceSnapshot[];
+  downloads: BrowserDownloadSnapshot[];
+  pendingDialog: BrowserDialogSnapshot | null;
 }
 
 export interface BrowserStateEvent {
   snapshot: BrowserSnapshot;
+}
+
+export interface BrowserCanvasWheelEvent {
+  tabId: string;
+  clientX: number;
+  clientY: number;
+  deltaY: number;
+}
+
+export type BrowserErrorCode =
+  | "AUTH_INVALID"
+  | "BRIDGE_UNAVAILABLE"
+  | "TAB_NOT_FOUND"
+  | "TAB_CLOSED"
+  | "STALE_REF"
+  | "INVALID_URL"
+  | "NAVIGATION_BLOCKED"
+  | "PERMISSION_DENIED"
+  | "DIALOG_OPEN"
+  | "PATH_DENIED"
+  | "TIMEOUT"
+  | "CANCELED"
+  | "RATE_LIMITED"
+  | "PAYLOAD_TOO_LARGE"
+  | "BROWSER_CRASHED"
+  | "AUDIT_UNAVAILABLE";
+
+export interface BrowserError {
+  code: BrowserErrorCode;
+  message: string;
+  retryable: boolean;
+  details?: Record<string, string | number | boolean | null>;
+}
+
+export type BrowserActor =
+  | {
+    kind: "human";
+    connectionId: string;
+  }
+  | {
+    kind: "agent";
+    agentId: string;
+    provider: BrowserAgentProvider;
+    terminalSessionId: string;
+    connectionId: string;
+    cwd: string;
+  };
+
+export interface BrowserElementRef {
+  ref: string;
+  tabId: string;
+  frameId: string;
+  documentRevision: number;
+  backendNodeId: number;
+}
+
+export interface BrowserElementBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface BrowserObservedElement {
+  ref: BrowserElementRef;
+  role: string;
+  name: string;
+  description: string | null;
+  value: string | null;
+  bounds: BrowserElementBounds | null;
+  disabled: boolean;
+  focused: boolean;
+  editable: boolean;
+}
+
+export interface BrowserObservation {
+  untrustedWebContent: true;
+  tabId: string;
+  url: string;
+  title: string;
+  documentRevision: number;
+  elements: BrowserObservedElement[];
+  nextCursor: string | null;
+}
+
+export type BrowserCommandType =
+  | "browser_list_tabs"
+  | "browser_new_tab"
+  | "browser_close_tab"
+  | "browser_activate_tab"
+  | "browser_navigate"
+  | "browser_back"
+  | "browser_forward"
+  | "browser_reload"
+  | "browser_observe"
+  | "browser_read_page"
+  | "browser_screenshot"
+  | "browser_click"
+  | "browser_hover"
+  | "browser_type"
+  | "browser_select"
+  | "browser_press"
+  | "browser_scroll"
+  | "browser_drag"
+  | "browser_wait_for"
+  | "browser_handle_dialog"
+  | "browser_download_wait"
+  | "browser_upload"
+  | "browser_get_activity";
+
+export interface BrowserCommand {
+  type: BrowserCommandType;
+  requestId: string;
+  tabId?: string;
+  url?: string;
+  ref?: BrowserElementRef | string;
+  targetRef?: BrowserElementRef | string;
+  text?: string;
+  values?: string[];
+  key?: string;
+  direction?: "up" | "down" | "left" | "right";
+  deltaX?: number;
+  deltaY?: number;
+  timeoutMs?: number;
+  condition?: "load" | "network-idle" | "text" | "element" | "url" | "download";
+  value?: string;
+  accept?: boolean;
+  promptText?: string;
+  paths?: string[];
+  cursor?: string;
+  limit?: number;
+  expectedRevision?: number;
+}
+
+export interface BrowserResult<T = unknown> {
+  ok: boolean;
+  requestId: string;
+  tabId: string | null;
+  commandSequence: number;
+  revisionBefore: number | null;
+  revisionAfter: number | null;
+  data?: T;
+  error?: BrowserError;
+}
+
+export interface BrowserActivityEvent {
+  sequence: number;
+  timestamp: number;
+  requestId: string;
+  actorKind: BrowserActor["kind"];
+  agentId: string | null;
+  provider: BrowserAgentProvider | null;
+  terminalSessionId: string | null;
+  tabId: string | null;
+  origin: string | null;
+  operation: BrowserCommandType;
+  targetHash: string | null;
+  revisionBefore: number | null;
+  revisionAfter: number | null;
+  durationMs: number;
+  ok: boolean;
+  errorCode: BrowserErrorCode | null;
+}
+
+export interface BrowserActivityStateEvent {
+  event: BrowserActivityEvent;
 }
 
 export type LimitSource = "codex-app-server" | "claude-usage-api" | "kimi-usage-api";
@@ -388,6 +621,7 @@ export interface CanvasTTYApi {
     getState(): Promise<BrowserSnapshot>;
     open(url?: string): Promise<BrowserSnapshot>;
     close(): Promise<void>;
+    closeAllTabs(): Promise<BrowserSnapshot>;
     newTab(url?: string): Promise<BrowserSnapshot>;
     selectTab(id: string): Promise<BrowserSnapshot>;
     closeTab(id: string): Promise<BrowserSnapshot>;
@@ -395,8 +629,13 @@ export interface CanvasTTYApi {
     back(id: string): Promise<BrowserSnapshot>;
     forward(id: string): Promise<BrowserSnapshot>;
     reload(id: string): Promise<BrowserSnapshot>;
+    execute(command: BrowserCommand): Promise<BrowserResult>;
+    getActivity(sinceSequence?: number): Promise<BrowserActivityEvent[]>;
+    clearData(): Promise<BrowserSnapshot>;
     setViewport(bounds: BrowserViewportBounds): void;
     onState(listener: (event: BrowserStateEvent) => void): () => void;
+    onActivity(listener: (event: BrowserActivityStateEvent) => void): () => void;
+    onCanvasWheel(listener: (event: BrowserCanvasWheelEvent) => void): () => void;
   };
   terminal: {
     list(): Promise<SessionSnapshot[]>;
@@ -448,6 +687,7 @@ export const IPC = {
   browserGetState: "browser:get-state",
   browserOpen: "browser:open",
   browserClose: "browser:close",
+  browserCloseAllTabs: "browser:close-all-tabs",
   browserNewTab: "browser:new-tab",
   browserSelectTab: "browser:select-tab",
   browserCloseTab: "browser:close-tab",
@@ -455,8 +695,13 @@ export const IPC = {
   browserBack: "browser:back",
   browserForward: "browser:forward",
   browserReload: "browser:reload",
+  browserExecute: "browser:execute",
+  browserGetActivity: "browser:get-activity",
+  browserClearData: "browser:clear-data",
   browserSetViewport: "browser:set-viewport",
   browserState: "browser:state",
+  browserActivity: "browser:activity",
+  browserCanvasWheel: "browser:canvas-wheel",
   terminalList: "terminal:list",
   terminalCreate: "terminal:create",
   terminalInput: "terminal:input",

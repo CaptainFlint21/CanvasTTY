@@ -35,7 +35,9 @@ test("terminal paste reads the trusted clipboard bridge and uses xterm paste sem
 test("terminal mouse coordinates are adapted for a transformed canvas", async () => {
   const source = await readFile(terminalCardPath, "utf8");
 
-  assert.match(source, /attachTerminalMouseCoordinateAdapter\(screen/);
+  assert.match(source, /attachTerminalMouseCoordinateAdapter\(\s*screen/);
+  assert.match(source, /zoomOverApplicationsRef\.current/);
+  assert.match(source, /data-canvas-zoom-surface="application"/);
 });
 
 test("selecting a terminal moves keyboard focus into the live xterm", async () => {

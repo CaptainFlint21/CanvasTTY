@@ -1,9 +1,10 @@
 import { extname } from "node:path";
 import { readFile, stat } from "node:fs/promises";
 import { BrowserWindow, clipboard, dialog, ipcMain, shell } from "electron";
-import type { IpcMainInvokeEvent, OpenDialogOptions } from "electron";
+import type { IpcMainEvent, IpcMainInvokeEvent, OpenDialogOptions } from "electron";
 import type {
   AppSettings,
+  BrowserCommand,
   CreateSessionRequest,
   ProviderId,
   SessionBounds
@@ -32,6 +33,8 @@ interface Dependencies {
   plugins: PluginManager;
   pluginMedia: PluginMediaService;
   browser: BrowserService;
+  getMainWindow(): BrowserWindow | null;
+  applyBrowserSettings(settings: AppSettings): void;
   openPluginWindow(pluginId: string, contributionId: string): Promise<void>;
   closePluginWindows(pluginId: string): void;
   requestPluginLauncher(provider: ProviderId): void;
@@ -44,6 +47,8 @@ export function registerIpc({
   plugins,
   pluginMedia,
   browser,
+  getMainWindow,
+  applyBrowserSettings,
   openPluginWindow,
   closePluginWindows,
   requestPluginLauncher
@@ -54,7 +59,11 @@ export function registerIpc({
   });
 
   ipcMain.handle(IPC.settingsGet, () => settings.get());
-  ipcMain.handle(IPC.settingsUpdate, (_event, patch: Partial<AppSettings>) => settings.update(patch));
+  ipcMain.handle(IPC.settingsUpdate, async (_event, patch: Partial<AppSettings>) => {
+    const next = await settings.update(patch);
+    applyBrowserSettings(next);
+    return next;
+  });
 
   ipcMain.handle(IPC.dialogPickDirectory, async (event, defaultPath?: string) => {
     const owner = BrowserWindow.fromWebContents(event.sender);
@@ -257,17 +266,66 @@ export function registerIpc({
     throw new Error(`Unsupported plugin method: ${String(method).slice(0, 80)}.`);
   });
 
-  ipcMain.handle(IPC.browserGetState, () => browser.getState());
-  ipcMain.handle(IPC.browserOpen, (_event, url?: string) => browser.open(url));
-  ipcMain.handle(IPC.browserClose, () => browser.close());
-  ipcMain.handle(IPC.browserNewTab, (_event, url?: string) => browser.newTab(url));
-  ipcMain.handle(IPC.browserSelectTab, (_event, id: string) => browser.selectTab(id));
-  ipcMain.handle(IPC.browserCloseTab, (_event, id: string) => browser.closeTab(id));
-  ipcMain.handle(IPC.browserNavigate, (_event, id: string, value: string) => browser.navigate(id, value));
-  ipcMain.handle(IPC.browserBack, (_event, id: string) => browser.back(id));
-  ipcMain.handle(IPC.browserForward, (_event, id: string) => browser.forward(id));
-  ipcMain.handle(IPC.browserReload, (_event, id: string) => browser.reload(id));
-  ipcMain.on(IPC.browserSetViewport, (_event, bounds) => browser.setViewport(bounds));
+  ipcMain.handle(IPC.browserGetState, (event) => {
+    assertMainRenderer(event, getMainWindow);
+    return browser.getState();
+  });
+  ipcMain.handle(IPC.browserOpen, (event, url?: string) => {
+    assertMainRenderer(event, getMainWindow);
+    return browser.open(url);
+  });
+  ipcMain.handle(IPC.browserClose, (event) => {
+    assertMainRenderer(event, getMainWindow);
+    return browser.close();
+  });
+  ipcMain.handle(IPC.browserCloseAllTabs, (event) => {
+    assertMainRenderer(event, getMainWindow);
+    return browser.closeAllTabs();
+  });
+  ipcMain.handle(IPC.browserNewTab, (event, url?: string) => {
+    assertMainRenderer(event, getMainWindow);
+    return browser.newTab(url);
+  });
+  ipcMain.handle(IPC.browserSelectTab, (event, id: string) => {
+    assertMainRenderer(event, getMainWindow);
+    return browser.selectTab(id);
+  });
+  ipcMain.handle(IPC.browserCloseTab, (event, id: string) => {
+    assertMainRenderer(event, getMainWindow);
+    return browser.closeTab(id);
+  });
+  ipcMain.handle(IPC.browserNavigate, (event, id: string, value: string) => {
+    assertMainRenderer(event, getMainWindow);
+    return browser.navigate(id, value);
+  });
+  ipcMain.handle(IPC.browserBack, (event, id: string) => {
+    assertMainRenderer(event, getMainWindow);
+    return browser.back(id);
+  });
+  ipcMain.handle(IPC.browserForward, (event, id: string) => {
+    assertMainRenderer(event, getMainWindow);
+    return browser.forward(id);
+  });
+  ipcMain.handle(IPC.browserReload, (event, id: string) => {
+    assertMainRenderer(event, getMainWindow);
+    return browser.reload(id);
+  });
+  ipcMain.handle(IPC.browserExecute, (event, command: BrowserCommand) => {
+    assertMainRenderer(event, getMainWindow);
+    return browser.executeHuman(command);
+  });
+  ipcMain.handle(IPC.browserGetActivity, (event, sinceSequence?: number) => {
+    assertMainRenderer(event, getMainWindow);
+    return browser.getActivity(sinceSequence);
+  });
+  ipcMain.handle(IPC.browserClearData, (event) => {
+    assertMainRenderer(event, getMainWindow);
+    return browser.clearData();
+  });
+  ipcMain.on(IPC.browserSetViewport, (event, bounds) => {
+    assertMainRenderer(event, getMainWindow);
+    browser.setViewport(bounds);
+  });
 
   ipcMain.handle(IPC.terminalList, () => terminals.list());
   ipcMain.handle(IPC.terminalCreate, (_event, request: CreateSessionRequest) => terminals.create(request));
@@ -290,6 +348,21 @@ export function registerIpc({
   ipcMain.handle(IPC.windowGetState, (event) => ({
     maximized: BrowserWindow.fromWebContents(event.sender)?.isMaximized() ?? false
   }));
+}
+
+function assertMainRenderer(
+  event: IpcMainEvent | IpcMainInvokeEvent,
+  getMainWindow: () => BrowserWindow | null
+): void {
+  const expected = getMainWindow();
+  if (
+    !expected
+    || expected.isDestroyed()
+    || event.sender !== expected.webContents
+    || event.senderFrame !== expected.webContents.mainFrame
+  ) {
+    throw new Error("Browser IPC is available only to the trusted CanvasTTY renderer.");
+  }
 }
 
 function safeExternalUrl(value: unknown): string {

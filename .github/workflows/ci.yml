@@ -30,3 +30,28 @@ jobs:
         run: npm run typecheck
       - name: Build production bundles
         run: npm run build
+      - name: Smoke-test the real Chromium browser core
+        timeout-minutes: 2
+        run: xvfb-run -a npm run smoke:browser
+      - name: Smoke-test the local MCP helper and one-time capability
+        timeout-minutes: 2
+        run: xvfb-run -a npm run smoke:browser:provider-helper
+
+  windows-pipe-host:
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install locked dependencies and build native modules
+        run: npm ci
+      - name: Build and self-test current-user-only named-pipe host
+        run: npm run test:windows-pipe-host
+      - name: Type-check Windows gateway integration
+        run: npm run typecheck
+      - name: Verify the packaged host resource
+        run: npm run package:win

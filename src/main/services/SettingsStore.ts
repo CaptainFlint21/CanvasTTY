@@ -98,6 +98,7 @@ function createDefaults(systemLocale: string): AppSettings {
     edgePan: false,
     edgePanSpeed: "normal",
     zoomSensitivity: "normal",
+    zoomOverApplications: false,
     focusActivation: "off",
     hoverFocus: false,
     hoverFocusSpeed: "normal",
@@ -110,7 +111,9 @@ function createDefaults(systemLocale: string): AppSettings {
     homeGridSize: { ...DEFAULT_HOME_GRID_SIZE },
     homeLayout: structuredClone(DEFAULT_HOME_LAYOUT),
     pluginCanvas: [],
-    browserCanvas: null
+    browserCanvas: null,
+    browserAgentAccess: true,
+    browserRestoreTabs: true
   };
 }
 
@@ -161,6 +164,9 @@ export function normalizeSettings(candidate: unknown, fallback: AppSettings): Ap
     zoomSensitivity: ZOOM_SENSITIVITIES.has(source.zoomSensitivity as ZoomSensitivity)
       ? source.zoomSensitivity as ZoomSensitivity
       : fallback.zoomSensitivity,
+    zoomOverApplications: typeof source.zoomOverApplications === "boolean"
+      ? source.zoomOverApplications
+      : fallback.zoomOverApplications,
     focusActivation: FOCUS_ACTIVATIONS.has(source.focusActivation as FocusActivation)
       ? source.focusActivation as FocusActivation
       : fallback.focusActivation,
@@ -181,7 +187,13 @@ export function normalizeSettings(candidate: unknown, fallback: AppSettings): Ap
     homeGridSize,
     homeLayout,
     pluginCanvas,
-    browserCanvas
+    browserCanvas,
+    browserAgentAccess: typeof source.browserAgentAccess === "boolean"
+      ? source.browserAgentAccess
+      : fallback.browserAgentAccess,
+    browserRestoreTabs: typeof source.browserRestoreTabs === "boolean"
+      ? source.browserRestoreTabs
+      : fallback.browserRestoreTabs
   };
 }
 

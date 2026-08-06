@@ -13,9 +13,14 @@ import type {
   SessionRemovedEvent,
   SessionSnapshot,
   TerminalDataEvent
-} from "../../shared/contracts";
-import { IPC } from "../../shared/contracts";
-import { tryPtyOperation } from "./ptySafety";
+} from "../../shared/contracts.ts";
+import { IPC } from "../../shared/contracts.ts";
+import type {
+  AgentBrowserLaunchCoordinator,
+  PreparedAgentBrowserPtyLaunch
+} from "./agent-browser/AgentBrowserBridge.ts";
+import { AGENT_BROWSER_ENV } from "./agent-browser/AgentBrowserBridge.ts";
+import { tryPtyOperation } from "./ptySafety.ts";
 
 const MAX_SCROLLBACK_CHARS = 240_000;
 const OUTPUT_BATCH_MS = 16;
@@ -31,6 +36,7 @@ interface ManagedSession {
   bufferLength: number;
   pendingOutput: string[];
   outputTimer: ReturnType<typeof setTimeout> | null;
+  agentBrowser: PreparedAgentBrowserPtyLaunch | null;
 }
 
 export interface ProviderLifecycleSignal {
@@ -46,8 +52,13 @@ type Emit = (
 
 export class TerminalManager {
   private readonly sessions = new Map<string, ManagedSession>();
+  private readonly emit: Emit;
+  private readonly agentBrowser?: AgentBrowserLaunchCoordinator;
 
-  constructor(private readonly emit: Emit) {}
+  constructor(emit: Emit, agentBrowser?: AgentBrowserLaunchCoordinator) {
+    this.emit = emit;
+    this.agentBrowser = agentBrowser;
+  }
 
   list(): SessionSnapshot[] {
     return [...this.sessions.values()].map((session) => snapshot(session));
@@ -57,8 +68,15 @@ export class TerminalManager {
     assertCreateRequest(request);
     assertDirectory(request.cwd);
 
-    const launch = resolveLaunch(request.provider, request.profile);
     const id = randomUUID();
+    const agentBrowser = request.provider === "terminal"
+      ? null
+      : this.agentBrowser?.prepareLaunch({
+        terminalSessionId: id,
+        provider: request.provider,
+        cwd: request.cwd
+      }) ?? null;
+    const launch = resolveLaunch(request.provider, request.profile, agentBrowser?.args ?? []);
     const metadata: SessionMetadata = {
       id,
       provider: request.provider,
@@ -73,13 +91,19 @@ export class TerminalManager {
       exitCode: null
     };
 
-    const process = pty.spawn(launch.command, launch.args, {
-      name: "xterm-256color",
-      cols: 100,
-      rows: 30,
-      cwd: request.cwd,
-      env: terminalEnvironment()
-    });
+    let process: IPty;
+    try {
+      process = pty.spawn(launch.command, launch.args, {
+        name: "xterm-256color",
+        cols: 100,
+        rows: 30,
+        cwd: request.cwd,
+        env: { ...terminalEnvironment(), ...agentBrowser?.environment }
+      });
+    } catch (error) {
+      agentBrowser?.cleanup();
+      throw error;
+    }
 
     const session: ManagedSession = {
       metadata,
@@ -88,7 +112,8 @@ export class TerminalManager {
       bufferStart: 0,
       bufferLength: 0,
       pendingOutput: [],
-      outputTimer: null
+      outputTimer: null,
+      agentBrowser
     };
     this.sessions.set(id, session);
     process.onData((data) => {
@@ -106,6 +131,7 @@ export class TerminalManager {
       this.flushOutput(id, current);
       current.metadata.exitCode = exitCode;
       current.metadata.status = exitCode === 0 ? "done" : "failed";
+      current.agentBrowser?.cleanup();
       this.emitSession(current.metadata);
     });
 
@@ -171,6 +197,7 @@ export class TerminalManager {
 
     this.flushOutput(id, session);
     this.sessions.delete(id);
+    session.agentBrowser?.cleanup();
     try {
       session.process.kill();
     } catch (error) {
@@ -209,7 +236,11 @@ export class TerminalManager {
   }
 }
 
-function resolveLaunch(provider: ProviderId, profile: CreateSessionRequest["profile"]): {
+function resolveLaunch(
+  provider: ProviderId,
+  profile: CreateSessionRequest["profile"],
+  agentBrowserArgs: string[]
+): {
   command: string;
   args: string[];
 } {
@@ -230,13 +261,18 @@ function resolveLaunch(provider: ProviderId, profile: CreateSessionRequest["prof
 
   return {
     command: command[provider],
-    args: profile === "yolo" ? dangerousArgs[provider] : []
+    args: [...(profile === "yolo" ? dangerousArgs[provider] : []), ...agentBrowserArgs]
   };
 }
 
-function terminalEnvironment(): Record<string, string> {
+export function terminalEnvironment(
+  source: Readonly<Record<string, string | undefined>> = process.env
+): Record<string, string> {
+  const reserved = new Set<string>(Object.values(AGENT_BROWSER_ENV));
   const environment = Object.fromEntries(
-    Object.entries(process.env).filter((entry): entry is [string, string] => typeof entry[1] === "string")
+    Object.entries(source).filter((entry): entry is [string, string] => (
+      typeof entry[1] === "string" && !reserved.has(entry[0])
+    ))
   );
   return { ...environment, TERM: "xterm-256color", COLORTERM: "truecolor" };
 }

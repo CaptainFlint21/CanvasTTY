@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   AgentProviderId,
   AppSettings,
+  BrowserAgentProvider,
+  BrowserSnapshot,
   HomeGridSize,
   HomeWidgetPlacement,
   InstalledPlugin,
@@ -11,6 +13,7 @@ import type {
   SessionSnapshot
 } from "../../../../shared/contracts";
 import {
+  BROWSER_PROVIDER_COLORS,
   HOME_GRID_CELL_HEIGHT,
   HOME_GRID_CELL_WIDTH,
   HOME_GRID_GAP,
@@ -45,6 +48,7 @@ import {
 
 interface HomeZoneProps {
   settings: AppSettings;
+  browser: BrowserSnapshot;
   mediaData: string | null;
   sessions: SessionSnapshot[];
   limits: LimitsSnapshot | null;
@@ -83,6 +87,7 @@ const HOME_RESIZE_DIRECTIONS: HomeResizeDirection[] = ["n", "ne", "e", "se", "s"
 
 export function HomeZone({
   settings,
+  browser,
   mediaData,
   sessions,
   limits,
@@ -92,6 +97,7 @@ export function HomeZone({
   onOpenSettings,
   onOpenAgent,
   onOpenTerminal,
+  onOpenBrowser,
   onFocusSession,
   onRequestMedia,
   onRemoveMedia,
@@ -112,6 +118,12 @@ export function HomeZone({
   const gridRef = useRef(settings.homeGridSize);
   const [draftLayout, setDraftLayout] = useState(settings.homeLayout);
   const [draftGridSize, setDraftGridSize] = useState(settings.homeGridSize);
+  const browserAgentGroups = useMemo(() => groupBrowserAgents(browser), [browser.agents]);
+  const browserLauncherLabel = browserAgentGroups.length === 0
+    ? t(locale, "browser")
+    : `${t(locale, "browser")}. ${t(locale, "browserAgents")}: ${browserAgentGroups
+      .map((group) => `${browserProviderLabel(group.provider, group.labels)}: ${group.count}`)
+      .join(", ")}`;
   layoutRef.current = draftLayout;
   gridRef.current = draftGridSize;
 
@@ -311,6 +323,29 @@ export function HomeZone({
               <ProviderIcon provider={provider} size="large" />
             </button>
           ))}
+          <button
+            className="launcher-button launcher-button--browser"
+            type="button"
+            onClick={onOpenBrowser}
+            title={browserLauncherLabel}
+            aria-label={browserLauncherLabel}
+          >
+            <UiIcon name="browser" size={42} />
+            {browserAgentGroups.length > 0 && (
+              <span className="launcher-browser-presence" aria-hidden="true">
+                {browserAgentGroups.map((group) => (
+                  <span
+                    className={`launcher-browser-presence__badge ${group.staleCount === group.count ? "launcher-browser-presence__badge--stale" : ""}`}
+                    style={{ "--agent-color": BROWSER_PROVIDER_COLORS[group.provider] } as React.CSSProperties}
+                    key={group.provider}
+                  >
+                    <span>{browserProviderCode(group.provider)}</span>
+                    {group.count > 1 && <strong>{group.count > 9 ? "9+" : group.count}</strong>}
+                  </span>
+                ))}
+              </span>
+            )}
+          </button>
         </section>
       );
     }
@@ -423,6 +458,47 @@ export function HomeZone({
       })}
     </section>
   );
+}
+
+interface BrowserAgentGroup {
+  provider: BrowserAgentProvider;
+  count: number;
+  staleCount: number;
+  labels: string[];
+}
+
+const BROWSER_PROVIDER_ORDER: BrowserAgentProvider[] = ["claude", "codex", "kimi", "unknown"];
+
+function groupBrowserAgents(browser: BrowserSnapshot): BrowserAgentGroup[] {
+  const groups = new Map<BrowserAgentProvider, BrowserAgentGroup>();
+  for (const agent of browser.agents) {
+    const group = groups.get(agent.provider) ?? {
+      provider: agent.provider,
+      count: 0,
+      staleCount: 0,
+      labels: []
+    };
+    group.count += 1;
+    if (agent.connectionState === "stale") group.staleCount += 1;
+    const label = agent.label.trim();
+    if (label && !group.labels.includes(label)) group.labels.push(label);
+    groups.set(agent.provider, group);
+  }
+  return BROWSER_PROVIDER_ORDER.flatMap((provider) => {
+    const group = groups.get(provider);
+    return group ? [group] : [];
+  });
+}
+
+function browserProviderLabel(provider: BrowserAgentProvider, labels: string[]): string {
+  return provider === "unknown" ? labels[0] ?? "AI" : PROVIDERS[provider].label;
+}
+
+function browserProviderCode(provider: BrowserAgentProvider): string {
+  if (provider === "claude") return "CL";
+  if (provider === "codex") return "CX";
+  if (provider === "kimi") return "KI";
+  return "AI";
 }
 
 function ClockWidget({ locale, now }: { locale: LocaleId; now: Date }): React.JSX.Element {

@@ -4,6 +4,8 @@ out/
 dist/
 release/
 artifacts/
+/build/windows-agent-pipe-host/
+/native/windows-agent-pipe-host/build/
 
 # Local secrets and credentials
 .env

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   AgentProviderId,
   AppSettings,
@@ -189,24 +189,41 @@ export function WorkspaceCanvas({
     setPanning(false);
   };
 
-  const zoomAt = (clientX: number, clientY: number, nextZoom: number): void => {
+  const zoomAt = useCallback((clientX: number, clientY: number, nextZoom: number): void => {
     const bounds = viewport.current?.getBoundingClientRect();
     if (!bounds) return;
+    const currentCamera = cameraRef.current;
     const localX = clientX - bounds.left;
     const localY = clientY - bounds.top;
-    const worldX = (localX - camera.x) / camera.zoom;
-    const worldY = (localY - camera.y) / camera.zoom;
+    const worldX = (localX - currentCamera.x) / currentCamera.zoom;
+    const worldY = (localY - currentCamera.y) / currentCamera.zoom;
     onCameraChange({
       zoom: nextZoom,
       x: localX - worldX * nextZoom,
       y: localY - worldY * nextZoom
     });
-  };
+  }, [onCameraChange]);
+
+  const zoomFromWheel = useCallback((clientX: number, clientY: number, wheelDeltaY: number): void => {
+    const currentSettings = settingsRef.current;
+    const deltaY = currentSettings.invertCanvasWheel ? -wheelDeltaY : wheelDeltaY;
+    const nextZoom = clamp(
+      cameraRef.current.zoom * wheelZoomFactor(deltaY, currentSettings.zoomSensitivity),
+      0.2,
+      1.35
+    );
+    zoomAt(clientX, clientY, nextZoom);
+  }, [zoomAt]);
+
+  useEffect(() => window.canvasTTY.browser.onCanvasWheel((event) => {
+    if (!settingsRef.current.zoomOverApplications) return;
+    zoomFromWheel(event.clientX, event.clientY, event.deltaY);
+  }), [zoomFromWheel]);
 
   const zoomBy = (factor: number): void => {
     const bounds = viewport.current?.getBoundingClientRect();
     if (!bounds) return;
-    const nextZoom = clamp(camera.zoom * factor, 0.2, 1.35);
+    const nextZoom = clamp(cameraRef.current.zoom * factor, 0.2, 1.35);
     zoomAt(bounds.left + bounds.width / 2, bounds.top + bounds.height / 2, nextZoom);
   };
 
@@ -233,16 +250,23 @@ export function WorkspaceCanvas({
       onPointerLeave={() => {
         edgePointer.current = null;
       }}
+      onWheelCapture={(event) => {
+        if (!settings.zoomOverApplications || !isApplicationWheelTarget(event.target)) return;
+        event.preventDefault();
+        event.stopPropagation();
+        zoomFromWheel(event.clientX, event.clientY, event.deltaY);
+      }}
       onWheel={(event) => {
+        if (settings.zoomOverApplications && isApplicationWheelTarget(event.target)) return;
         if ((event.target as HTMLElement).closest('[data-wheel-owner="local"]')) return;
         event.preventDefault();
-        const deltaY = settings.invertCanvasWheel ? -event.deltaY : event.deltaY;
-        zoomAt(event.clientX, event.clientY, clamp(camera.zoom * wheelZoomFactor(deltaY, settings.zoomSensitivity), 0.2, 1.35));
+        zoomFromWheel(event.clientX, event.clientY, event.deltaY);
       }}
     >
       <div className="workspace__scene" style={{ transform: `translate(${camera.x}px, ${camera.y}px) scale(${camera.zoom})` }}>
         <HomeZone
           settings={settings}
+          browser={browser}
           mediaData={mediaData}
           sessions={sessions}
           limits={limits}
@@ -276,6 +300,7 @@ export function WorkspaceCanvas({
               hoverFocus={settings.hoverFocus}
               hoverFocusSpeed={settings.hoverFocusSpeed}
               invertTerminalWheel={settings.invertTerminalWheel}
+              zoomOverApplications={settings.zoomOverApplications}
               selected={activeSessionId === session.id}
               renaming={renamingSessionId === session.id}
               snapTargets={[
@@ -336,6 +361,7 @@ export function WorkspaceCanvas({
               camera={camera}
               visible={browserViewVisible && !homeEditing}
               snapEnabled={settings.snapToGrid}
+              zoomOverApplications={settings.zoomOverApplications}
               snapTargets={[
                 homeBounds,
                 ...sessions.map((candidate) => ({ position: candidate.position, size: candidate.size })),
@@ -381,4 +407,9 @@ export function WorkspaceCanvas({
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+function isApplicationWheelTarget(target: EventTarget | null): boolean {
+  return target instanceof HTMLElement
+    && target.closest('[data-canvas-zoom-surface="application"]') !== null;
 }

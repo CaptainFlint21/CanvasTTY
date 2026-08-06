@@ -1,6 +1,9 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type {
   AppSettings,
+  BrowserActivityStateEvent,
+  BrowserCanvasWheelEvent,
+  BrowserCommand,
   BrowserStateEvent,
   BrowserViewportBounds,
   CanvasTTYApi,
@@ -61,6 +64,7 @@ const api: CanvasTTYApi = {
     getState: () => ipcRenderer.invoke(IPC.browserGetState),
     open: (url?: string) => ipcRenderer.invoke(IPC.browserOpen, url),
     close: () => ipcRenderer.invoke(IPC.browserClose),
+    closeAllTabs: () => ipcRenderer.invoke(IPC.browserCloseAllTabs),
     newTab: (url?: string) => ipcRenderer.invoke(IPC.browserNewTab, url),
     selectTab: (id: string) => ipcRenderer.invoke(IPC.browserSelectTab, id),
     closeTab: (id: string) => ipcRenderer.invoke(IPC.browserCloseTab, id),
@@ -68,8 +72,13 @@ const api: CanvasTTYApi = {
     back: (id: string) => ipcRenderer.invoke(IPC.browserBack, id),
     forward: (id: string) => ipcRenderer.invoke(IPC.browserForward, id),
     reload: (id: string) => ipcRenderer.invoke(IPC.browserReload, id),
+    execute: (command: BrowserCommand) => ipcRenderer.invoke(IPC.browserExecute, command),
+    getActivity: (sinceSequence?: number) => ipcRenderer.invoke(IPC.browserGetActivity, sinceSequence),
+    clearData: () => ipcRenderer.invoke(IPC.browserClearData),
     setViewport: (bounds: BrowserViewportBounds) => ipcRenderer.send(IPC.browserSetViewport, bounds),
-    onState: (listener: (event: BrowserStateEvent) => void) => subscribe(IPC.browserState, listener)
+    onState: (listener: (event: BrowserStateEvent) => void) => subscribe(IPC.browserState, listener),
+    onActivity: (listener: (event: BrowserActivityStateEvent) => void) => subscribe(IPC.browserActivity, listener),
+    onCanvasWheel: (listener: (event: BrowserCanvasWheelEvent) => void) => subscribe(IPC.browserCanvasWheel, listener)
   },
   terminal: {
     list: () => ipcRenderer.invoke(IPC.terminalList),

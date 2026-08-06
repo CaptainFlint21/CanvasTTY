@@ -43,7 +43,8 @@ export function remapTerminalMouseCoordinates(
 
 export function attachTerminalMouseCoordinateAdapter(
   screen: HTMLElement,
-  getWheelMultiplier: () => 1 | -1 = () => 1
+  getWheelMultiplier: () => 1 | -1 = () => 1,
+  shouldRouteWheelToCanvas: () => boolean = () => false
 ): () => void {
   const ownerDocument = screen.ownerDocument;
   const syntheticEvents = new WeakSet<Event>();
@@ -82,6 +83,7 @@ export function attachTerminalMouseCoordinateAdapter(
     if (syntheticEvents.has(event)) return;
     const target = event.target;
     if (!(target instanceof Node) || !screen.contains(target)) return;
+    if (shouldRouteWheelToCanvas()) return;
     const rect = screen.getBoundingClientRect();
     const adjusted = remapTerminalMouseCoordinates(
       { x: event.clientX, y: event.clientY },

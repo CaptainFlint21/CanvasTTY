@@ -19,7 +19,10 @@ Electron main process
     ├── LimitsService  → sanitized provider-limit adapters and cache
     ├── PluginManager  → GitHub install, manifest validation, assets, permissions, storage
     ├── PluginMediaService → user-granted music folders, ranged audio streams, playlist files
-    ├── BrowserService → built-in tabs and isolated WebContentsView lifecycle
+    ├── BrowserService → tabs, shared persistent profile, downloads, presence, WebContentsView lifecycle
+    │   ├── BrowserStore / BrowserPolicyService / BrowserAuditStore
+    │   ├── BrowserCore / BrowserCommandDispatcher / BrowserAutomationService
+    │   └── AgentGateway → authenticated UDS/named pipe for the bundled stdio MCP helper
     ├── canvastty-plugin:// → CSP-constrained static plugin resources
     ├── canvastty-media:// → permission-checked local audio streams
     └── native dialogs/window controls
@@ -33,7 +36,10 @@ Electron main process
 - `src/main/services/SettingsStore.ts` normalizes every update and persists through a serialized atomic write.
 - `src/main/services/PluginManager.ts` installs ready-to-run static repositories without executing package scripts, rejects symlinks and oversized packages, persists the enabled registry, serves only contained package files, and enforces per-plugin permissions/storage quotas.
 - `src/main/services/PluginMediaService.ts` persists per-plugin grants only after a native folder choice, hides absolute paths, skips symlinks, and serves contained audio with HTTP Range semantics. Playlist reads stay inside granted libraries; writes are bounded and atomic under the library's `Playlists/` directory.
-- `src/main/services/BrowserService.ts` owns the built-in browser's `WebContentsView` tabs. Remote pages use a dedicated persistent partition with Node disabled, context isolation and sandbox enabled, and website permission requests denied by default. It is a core service, never a runtime plugin capability.
+- `src/main/services/BrowserService.ts` is the only owner of the built-in browser's `WebContentsView` tabs and shared persistent partition. Remote pages have no preload or Node access, keep context isolation and sandbox enabled, and cannot request hardware, location, notification, clipboard-read, certificate-bypass, or external-protocol capabilities. HTTP(S) popups are adopted as internal tabs; other schemes are rejected.
+- `src/main/services/browser/` contains the browser kernel. `BrowserStore` atomically persists only tab order, active tab, and safe restore URLs. `BrowserPolicyService` centralizes URL, permission, download, and upload rules; validated uploads are copied through an already-open no-follow file descriptor into private staging before Chromium sees them. `BrowserAutomationService` attaches Electron's internal debugger to the existing live tab without a remote-debugging port. `BrowserCommandDispatcher` adds revisions, revision-bound refs, mutation request deduplication, per-tab FIFO mutation lanes, bounded concurrency, typed errors, and redacted fail-closed audit for agent mutations.
+- `src/main/services/agent-browser/` exposes the kernel only through an authenticated user-local Unix socket (`0600`) or Windows named pipe. The Windows pipe is created by the bundled native host with a protected DACL containing only the exact current-user SID and rejects remote clients. Each agent PTY receives a one-use capability through its child environment. The bundled stdio MCP helper is the only protocol adapter; no TCP listener, cookie/storage endpoint, arbitrary evaluation tool, or raw CDP surface exists.
+- `TerminalManager` injects the MCP helper per launch for Claude Code and Codex without changing their global configuration. Kimi uses its per-run MCP configuration when supported; older Kimi versions receive a compare-and-swap temporary CanvasTTY entry and one exact permission rule with an atomic recovery journal. Unrelated MCP entries, credentials, and file/shell permissions are preserved.
 - `src/main/services/cliEnvironment.ts` supplements the graphical-session `PATH` with existing per-user CLI directories before any provider process is spawned. It never reads shell startup scripts.
 
 The primary `BrowserWindow` is created and shown with a lightweight local startup page before settings, plugins, media, and IPC services initialize. Successful initialization replaces that page with the trusted renderer; bootstrap failures replace it with a visible error page and retain a native-dialog fallback. The main process holds Electron's single-instance lock and restores/focuses the existing window when another launch is attempted.
@@ -42,7 +48,9 @@ Runtime plugin code is never imported into main or the trusted renderer bundle. 
 
 Plugin music access is capability-based rather than generic filesystem access. Media scans return library IDs, relative paths, metadata, and `canvastty-media://` stream URLs; raw playlist text remains the only format-neutral file content exposed. A media URL is resolved only for the owning enabled plugin and only beneath a previously selected library root. Removing a plugin revokes its persisted folder grants.
 
-The built-in browser is split across surfaces: `BrowserCard` renders tabs and navigation controls in the React scene, while `BrowserService` positions the active native view over the card's measured viewport. The view is hidden during semantic summary, HOME editing, and trusted modal surfaces. Agent browser-control tools are intentionally not part of this initial browser scaffold.
+The built-in browser is split across surfaces: `BrowserCard` renders trusted tabs, navigation, agent badges, downloads, dialogs, and canvas geometry, while `BrowserService` positions the active native view over the measured viewport. The native view is hidden during semantic summary, HOME editing, and trusted modal surfaces. A transparent trusted mouse-passthrough window draws live agent cursors above the native view; Wayland uses an isolated-world fallback. Trusted tab badges remain the source of truth.
+
+Renderer IPC and the agent gateway call the same `BrowserCore.execute(actor, command, signal)` boundary. Reads may run concurrently. Mutations are ordered FIFO per tab while different tabs remain independent; a repeated mutation request ID returns the recorded result. Navigation and document changes advance the revision, so stale accessibility refs fail before side effects. Agent activity is recorded as a redacted append-only hash chain: typed/page text, screenshots, URL query/fragment, credentials, headers, cookies, and tokens are not stored.
 
 ## Renderer boundaries
 
@@ -58,7 +66,7 @@ App
 │   ├── PluginCanvasCard   sandboxed plugin app with canvas bounds and semantic summary
 │   └── BrowserCard        trusted browser chrome and canvas geometry for the native WebContentsView
 ├── AgentLaunchDialog      fixed provider + folder + profile + launch
-└── SettingsPanel          General, Appearance, Controls, and Plugins
+└── SettingsPanel          General, Appearance, Controls, Browser, and Plugins
     └── PluginSettingsSection install preview, permissions, registry, and contributions
 ```
 
