@@ -1,0 +1,367 @@
+.orcs-control {
+  position: fixed;
+  right: 22px;
+  bottom: 22px;
+  z-index: 8800;
+  display: grid;
+  justify-items: end;
+  gap: 12px;
+  pointer-events: none;
+  font-family: Inter, system-ui, sans-serif;
+}
+
+.orcs-control__toggle,
+.orcs-control__panel {
+  pointer-events: auto;
+}
+
+.orcs-control__toggle {
+  min-width: 92px;
+  height: 44px;
+  padding: 0 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border: 1px solid rgba(255,255,255,.15);
+  border-radius: 14px;
+  color: #fff;
+  background: rgba(37,39,51,.94);
+  box-shadow: 0 16px 40px rgba(0,0,0,.34);
+  cursor: pointer;
+  backdrop-filter: blur(18px);
+}
+
+.orcs-control__toggle strong {
+  font: 900 12px/1 var(--font-mono);
+  letter-spacing: .16em;
+}
+
+.orcs-control__toggle-state {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--yellow);
+  box-shadow: 0 0 0 4px rgba(255,211,92,.13);
+}
+
+.orcs-control--open .orcs-control__toggle-state {
+  background: var(--primary);
+  box-shadow: 0 0 0 4px rgba(163,218,182,.14);
+}
+
+.orcs-control__panel {
+  width: min(820px, calc(100vw - 44px));
+  max-height: calc(100vh - 112px);
+  padding: 18px;
+  display: none;
+  overflow: auto;
+  border: 1px solid rgba(255,255,255,.13);
+  border-radius: 22px;
+  color: var(--text);
+  background: rgba(38,40,52,.97);
+  box-shadow: 0 28px 80px rgba(0,0,0,.48);
+  scrollbar-width: thin;
+  backdrop-filter: blur(24px);
+}
+
+.orcs-control--open .orcs-control__panel {
+  display: block;
+  animation: orcs-control-enter .18s ease-out;
+}
+
+@keyframes orcs-control-enter {
+  from { opacity: 0; transform: translateY(10px) scale(.985); }
+  to { opacity: 1; transform: none; }
+}
+
+.orcs-control__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.orcs-control__header h2 {
+  margin: 5px 0 0;
+  font: 900 25px/1.05 var(--font-mono);
+  letter-spacing: -.04em;
+}
+
+.orcs-control__eyebrow {
+  color: var(--primary);
+  font: 850 10px/1 var(--font-mono);
+  letter-spacing: .15em;
+  text-transform: uppercase;
+}
+
+.orcs-control__header > button {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  color: var(--text);
+  background: var(--surface-soft);
+  cursor: pointer;
+  font-size: 24px;
+}
+
+.orcs-control__summary {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 130px 150px;
+  gap: 10px;
+}
+
+.orcs-control__task,
+.orcs-control__summary-stat {
+  min-width: 0;
+  padding: 13px 15px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 14px;
+  background: var(--surface-soft);
+}
+
+.orcs-control__task > span,
+.orcs-control__summary-stat > span {
+  color: var(--text-muted-on-dark);
+  font: 800 10px/1 var(--font-mono);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.orcs-control__task strong {
+  overflow: hidden;
+  font-size: 15px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.orcs-control__task small {
+  color: var(--text-muted-on-dark);
+  font: 700 10px/1.2 var(--font-mono);
+}
+
+.orcs-control__summary-stat strong {
+  font: 900 15px/1 var(--font-mono);
+  text-transform: uppercase;
+}
+
+.orcs-control__summary-stat--pending {
+  box-shadow: inset 3px 0 var(--yellow);
+}
+
+.orcs-control__summary-stat--approved {
+  box-shadow: inset 3px 0 var(--primary);
+}
+
+.orcs-control__summary-stat--blocked,
+.orcs-control__summary-stat--rejected {
+  box-shadow: inset 3px 0 var(--danger);
+}
+
+.orcs-control__section {
+  margin-top: 17px;
+}
+
+.orcs-control__section > h3 {
+  margin: 0 0 9px;
+  color: var(--text-muted-on-dark);
+  font: 850 11px/1 var(--font-mono);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.orcs-control__roles {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.orcs-role {
+  min-width: 0;
+  min-height: 174px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 15px;
+  background: var(--surface-soft);
+  box-shadow: inset 0 3px transparent;
+}
+
+.orcs-role--done { box-shadow: inset 0 3px var(--primary); }
+.orcs-role--working { box-shadow: inset 0 3px var(--secondary); }
+.orcs-role--waiting,
+.orcs-role--needs_approval { box-shadow: inset 0 3px var(--yellow); }
+.orcs-role--failed { box-shadow: inset 0 3px var(--danger); }
+
+.orcs-role header {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.orcs-role__mark {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  color: var(--text-dark);
+  background: var(--primary);
+  font: 900 13px/1 var(--font-mono);
+}
+
+.orcs-role header > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.orcs-role header strong,
+.orcs-role header span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.orcs-role header strong { font-size: 12px; }
+.orcs-role header div > span {
+  color: var(--text-muted-on-dark);
+  font: 750 9px/1 var(--font-mono);
+}
+
+.orcs-role p {
+  margin: 0;
+  color: rgba(255,255,255,.78);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.orcs-role footer {
+  margin-top: auto;
+  display: grid;
+  gap: 4px;
+  color: var(--text-muted-on-dark);
+  font: 700 9px/1.2 var(--font-mono);
+}
+
+.orcs-control__lower-grid {
+  display: grid;
+  grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr);
+  gap: 14px;
+}
+
+.orcs-checks,
+.orcs-timeline {
+  display: grid;
+  gap: 7px;
+}
+
+.orcs-check {
+  min-width: 0;
+  min-height: 38px;
+  padding: 8px 10px;
+  display: grid;
+  grid-template-columns: 9px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  border-radius: 10px;
+  background: var(--surface-soft);
+  font-size: 10px;
+}
+
+.orcs-check strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.orcs-check > span:last-child {
+  color: var(--text-muted-on-dark);
+  font: 700 9px/1 var(--font-mono);
+}
+
+.orcs-check__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--yellow);
+}
+
+.orcs-check--passed .orcs-check__dot { background: var(--primary); }
+.orcs-check--failed .orcs-check__dot { background: var(--danger); }
+.orcs-check--running .orcs-check__dot { background: var(--secondary); }
+.orcs-check--skipped .orcs-check__dot { background: var(--text-muted-on-dark); }
+
+.orcs-event {
+  min-width: 0;
+  min-height: 38px;
+  padding: 8px 10px;
+  display: grid;
+  grid-template-columns: 58px 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  border-radius: 10px;
+  background: var(--surface-soft);
+}
+
+.orcs-event time {
+  color: var(--text-muted-on-dark);
+  font: 700 9px/1 var(--font-mono);
+}
+
+.orcs-event__level {
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--text-dark);
+  background: var(--secondary);
+  font: 900 11px/1 var(--font-mono);
+}
+
+.orcs-event--success .orcs-event__level { background: var(--primary); }
+.orcs-event--warning .orcs-event__level { background: var(--yellow); }
+.orcs-event--error .orcs-event__level { color: #fff; background: var(--danger); }
+
+.orcs-event p {
+  margin: 0;
+  overflow: hidden;
+  color: rgba(255,255,255,.78);
+  font-size: 10px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.orcs-control__footer {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255,255,255,.08);
+  color: var(--text-muted-on-dark);
+  font: 750 10px/1.3 var(--font-mono);
+  text-align: center;
+}
+
+@media (max-width: 900px) {
+  .orcs-control__roles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .orcs-control__summary { grid-template-columns: 1fr 1fr; }
+  .orcs-control__task { grid-column: 1 / -1; }
+  .orcs-control__lower-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 560px) {
+  .orcs-control { right: 12px; bottom: 12px; }
+  .orcs-control__panel { width: calc(100vw - 24px); padding: 13px; }
+  .orcs-control__roles { grid-template-columns: 1fr; }
+}
