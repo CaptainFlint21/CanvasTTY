@@ -20,7 +20,7 @@ Initial platform target:
 Expected local layout:
 
 ```text
-/home/kate/llm/orcs/
+$HOME/llm/orcs/
 ├── Orcs-repo/             clean ORCS main / source of truth
 ├── Orcs-workspace/        ORCS task worktree
 ├── CanvasTTY-repo/        clean CanvasTTY fork main / source of truth
