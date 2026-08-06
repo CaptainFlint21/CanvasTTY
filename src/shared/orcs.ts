@@ -234,7 +234,11 @@ export function isOrcsSnapshot(value: unknown): value is OrcsSnapshot {
     || value.timeline.length > 200
     || !value.timeline.every(isTimelineEvent)) return false;
 
-  return ORCS_ROLE_IDS.every((roleId) => value.roles.some((role) => role.role === roleId));
+  // The checks above prove that every entry is an OrcsRoleSnapshot. TypeScript
+  // does not preserve that property-level narrowing after the compound guard,
+  // so keep the validated array in an explicitly typed local binding.
+  const roles = value.roles as OrcsRoleSnapshot[];
+  return ORCS_ROLE_IDS.every((roleId) => roles.some((role) => role.role === roleId));
 }
 
 export function assertOrcsSnapshot(value: unknown): asserts value is OrcsSnapshot {
