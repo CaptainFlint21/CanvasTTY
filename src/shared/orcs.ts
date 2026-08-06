@@ -122,6 +122,17 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function isBoundedInteger(value: unknown, minimum: number, maximum: number): value is number {
+  return typeof value === "number"
+    && Number.isInteger(value)
+    && value >= minimum
+    && value <= maximum;
+}
+
 function isBoundedString(value: unknown, maxLength: number, allowNull = false): boolean {
   return (allowNull && value === null) || (typeof value === "string" && value.length <= maxLength);
 }
@@ -150,12 +161,8 @@ function isRoleSnapshot(value: unknown): value is OrcsRoleSnapshot {
     && isBoundedString(value.model, 120)
     && typeof value.providerHealth === "string"
     && PROVIDER_HEALTH_SET.has(value.providerHealth)
-    && Number.isInteger(value.fallbackLevel)
-    && Number(value.fallbackLevel) >= 0
-    && Number(value.fallbackLevel) <= 3
-    && Number.isInteger(value.toolCalls)
-    && Number(value.toolCalls) >= 0
-    && Number(value.toolCalls) <= 10_000
+    && isBoundedInteger(value.fallbackLevel, 0, 3)
+    && isBoundedInteger(value.toolCalls, 0, 10_000)
     && isBoundedString(value.summary, 240);
 }
 
@@ -171,7 +178,7 @@ function isVerificationCheck(value: unknown): value is OrcsVerificationCheck {
 function isTimelineEvent(value: unknown): value is OrcsTimelineEvent {
   if (!isRecord(value) || !hasOnlyKeys(value, ["id", "occurredAt", "level", "role", "message"])) return false;
   return isBoundedString(value.id, 80)
-    && Number.isFinite(value.occurredAt)
+    && isFiniteNumber(value.occurredAt)
     && typeof value.level === "string"
     && EVENT_LEVEL_SET.has(value.level)
     && (value.role === null || (typeof value.role === "string" && ROLE_ID_SET.has(value.role)))
@@ -206,7 +213,7 @@ export function isOrcsSnapshot(value: unknown): value is OrcsSnapshot {
 
   if (value.schemaVersion !== ORCS_SNAPSHOT_VERSION
     || (value.source !== "mock" && value.source !== "daemon")
-    || !Number.isFinite(value.fetchedAt)
+    || !isFiniteNumber(value.fetchedAt)
     || typeof value.stale !== "boolean"
     || !isBoundedString(value.runId, 128, true)
     || !isBoundedString(value.taskTitle, 200, true)
