@@ -3,7 +3,7 @@ import { extname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const PROJECT_ROOT = resolve(fileURLToPath(new URL("..", import.meta.url)));
-const IGNORED_DIRECTORIES = new Set([
+const IGNORED_ENTRY_NAMES = new Set([
   ".git",
   ".agents",
   ".codex",
@@ -74,7 +74,11 @@ async function walk(directory) {
   const files = [];
 
   for (const entry of entries) {
-    if (entry.isDirectory() && IGNORED_DIRECTORIES.has(entry.name)) continue;
+    // In a normal clone .git is a directory; in a Git worktree it is a file
+    // containing an absolute gitdir path. Both forms are repository metadata,
+    // not publishable project content, so skip the entry before inspecting type.
+    if (IGNORED_ENTRY_NAMES.has(entry.name)) continue;
+
     const path = resolve(directory, entry.name);
     if (entry.isDirectory()) files.push(...await walk(path));
     else if (entry.isFile()) files.push(path);
