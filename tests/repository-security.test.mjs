@@ -1,10 +1,35 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 import { collectRepositoryIssues } from "../scripts/audit-secrets.mjs";
 
 test("publishable repository files contain no high-confidence secrets or personal paths", async () => {
   assert.deepEqual(await collectRepositoryIssues(), []);
+});
+
+test("secret audit ignores the Git metadata file used by linked worktrees", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "canvastty-secret-audit-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+
+  const privateGitDir = `/${["home", "local-user", "repo", ".git", "worktrees", "workspace"].join("/")}`;
+  await writeFile(join(root, ".git"), `gitdir: ${privateGitDir}\n`, "utf8");
+  await writeFile(join(root, "README.md"), "publishable content\n", "utf8");
+
+  assert.deepEqual(await collectRepositoryIssues(root), []);
+});
+
+test("secret audit still reports personal paths in publishable files", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "canvastty-secret-audit-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+
+  const privatePath = `/${["home", "local-user", "project"].join("/")}/`;
+  await writeFile(join(root, "notes.md"), `Local path: ${privatePath}\n`, "utf8");
+
+  assert.deepEqual(await collectRepositoryIssues(root), [
+    { path: "notes.md", rule: "personal home path" }
+  ]);
 });
 
 test("gitignore excludes local credentials, logs, builds, and agent context", async () => {
