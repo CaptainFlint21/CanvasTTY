@@ -15,6 +15,8 @@ import type {
   TerminalDataEvent
 } from "../shared/contracts";
 import { IPC } from "../shared/contracts";
+import type { OrcsDesktopApiHost } from "../shared/orcsBridge";
+import { ORCS_DESKTOP_IPC } from "../shared/orcsBridge";
 
 function subscribe<T>(channel: string, listener: (event: T) => void): () => void {
   const wrapped = (_event: Electron.IpcRendererEvent, payload: T): void => listener(payload);
@@ -22,7 +24,7 @@ function subscribe<T>(channel: string, listener: (event: T) => void): () => void
   return () => ipcRenderer.removeListener(channel, wrapped);
 }
 
-const api: CanvasTTYApi = {
+const api: CanvasTTYApi & OrcsDesktopApiHost = {
   clipboard: {
     readText: () => ipcRenderer.invoke(IPC.clipboardRead),
     writeText: (text: string) => ipcRenderer.send(IPC.clipboardWrite, text)
@@ -40,6 +42,9 @@ const api: CanvasTTYApi = {
   },
   limits: {
     get: () => ipcRenderer.invoke(IPC.limitsGet)
+  },
+  orcs: {
+    getSnapshot: () => ipcRenderer.invoke(ORCS_DESKTOP_IPC.snapshotGet)
   },
   plugins: {
     list: () => ipcRenderer.invoke(IPC.pluginsList),
