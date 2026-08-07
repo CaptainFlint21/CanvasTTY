@@ -1,5 +1,6 @@
 import { createConnection } from "node:net";
 import { isAbsolute, join } from "node:path";
+import { TextDecoder } from "node:util";
 import type { OrcsSnapshot } from "../../shared/orcs";
 import { isOrcsSnapshot } from "../../shared/orcs";
 import type {
@@ -11,6 +12,7 @@ import { ORCS_DESKTOP_PROTOCOL_VERSION } from "../../shared/orcsBridge";
 const MAX_RESPONSE_BYTES = 262_144;
 const REQUEST_TIMEOUT_MS = 2_000;
 const RESPONSE_KEYS = ["version", "ok", "operation", "data", "error"] as const;
+const STRICT_UTF8 = new TextDecoder("utf-8", { fatal: true });
 
 class OrcsDesktopClientError extends Error {
   constructor(readonly reason: OrcsDesktopUnavailableReason) {
@@ -113,7 +115,8 @@ function parseSnapshotResponse(raw: Buffer): OrcsSnapshot {
 
   let payload: unknown;
   try {
-    payload = JSON.parse(raw.subarray(0, raw.length - 1).toString("utf8"));
+    const decoded = STRICT_UTF8.decode(raw.subarray(0, raw.length - 1));
+    payload = JSON.parse(decoded);
   } catch {
     throw new OrcsDesktopClientError("invalid_response");
   }
