@@ -89,7 +89,9 @@ const COPY = {
     live: "Live · только чтение",
     stale: "Последний snapshot устарел",
     readOnlyLive: "Только чтение · данные получены через локальный Unix socket",
-    readOnlyStale: "Только чтение · показан последний валидный snapshot"
+    readOnlyStale: "Только чтение · показан последний валидный snapshot",
+    readOnlyLoading: "Только чтение · ожидается ответ локального ORCS",
+    readOnlyUnavailable: "Только чтение · соединение с локальным ORCS отсутствует"
   },
   en: {
     title: "ORCS Control Room",
@@ -109,7 +111,9 @@ const COPY = {
     live: "Live · read-only",
     stale: "Last snapshot is stale",
     readOnlyLive: "Read-only · data received through the local Unix socket",
-    readOnlyStale: "Read-only · showing the last valid snapshot"
+    readOnlyStale: "Read-only · showing the last valid snapshot",
+    readOnlyLoading: "Read-only · waiting for the local ORCS response",
+    readOnlyUnavailable: "Read-only · local ORCS connection is unavailable"
   }
 } as const;
 
@@ -177,6 +181,13 @@ function LiveControlRoom(): React.JSX.Element {
       : state === "loading"
         ? copy.loading
         : copy.unavailable;
+  const footer = state === "available"
+    ? copy.readOnlyLive
+    : state === "stale"
+      ? copy.readOnlyStale
+      : state === "loading"
+        ? copy.readOnlyLoading
+        : copy.readOnlyUnavailable;
 
   return (
     <div
@@ -223,9 +234,7 @@ function LiveControlRoom(): React.JSX.Element {
           </section>
         )}
 
-        <footer className="orcs-control__footer">
-          {state === "stale" ? copy.readOnlyStale : copy.readOnlyLive}
-        </footer>
+        <footer className="orcs-control__footer">{footer}</footer>
       </aside>
     </div>
   );
