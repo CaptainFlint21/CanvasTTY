@@ -2,9 +2,11 @@ import { join } from "node:path";
 import { app, BrowserWindow, dialog, protocol } from "electron";
 import { IPC } from "../shared/contracts";
 import { registerIpc } from "./ipc/registerIpc";
+import { registerOrcsIpc } from "./ipc/registerOrcsIpc";
 import { SettingsStore } from "./services/SettingsStore";
 import { TerminalManager } from "./services/TerminalManager";
 import { LimitsService } from "./services/LimitsService";
+import { OrcsDesktopClient } from "./services/OrcsDesktopClient";
 import { augmentCliPath } from "./services/cliEnvironment";
 import { PluginManager } from "./services/PluginManager";
 import { PluginMediaService } from "./services/PluginMediaService";
@@ -172,6 +174,10 @@ async function initializeServices(): Promise<void> {
   await pluginMediaService.load();
   protocol.handle("canvastty-plugin", (request) => pluginManager!.protocolResponse(request.url));
   protocol.handle("canvastty-media", (request) => pluginMediaService!.protocolResponse(request));
+  registerOrcsIpc({
+    client: new OrcsDesktopClient(),
+    getMainWindow: () => mainWindow
+  });
   registerIpc({
     settings,
     terminals: terminalManager,
