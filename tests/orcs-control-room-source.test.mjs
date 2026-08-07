@@ -21,11 +21,12 @@ test("visible ORCS control room remains deterministic, mock-backed and read-only
   assert.doesNotMatch(source, /ipcRenderer|child_process|node:fs/);
 });
 
-test("renderer mounts the ORCS surface alongside the existing CanvasTTY app", async () => {
+test("renderer mounts the live ORCS surface alongside the existing CanvasTTY app", async () => {
   const source = await readFile(rendererEntryUrl, "utf8");
 
-  assert.match(source, /import \{ OrcsControlRoom \}/);
+  assert.match(source, /import \{ OrcsLiveControlRoom \}/);
   assert.match(source, /<App \/>/);
-  assert.match(source, /<OrcsControlRoom \/>/);
+  assert.match(source, /<OrcsLiveControlRoom \/>/);
+  assert.doesNotMatch(source, /<OrcsControlRoom \/>/);
   assert.match(source, /styles\/orcs\.css/);
 });
