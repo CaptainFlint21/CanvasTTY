@@ -10,7 +10,8 @@ export type OrcsDesktopUnavailableReason =
   | "unsupported_platform"
   | "runtime_unavailable"
   | "daemon_unavailable"
-  | "invalid_response";
+  | "invalid_response"
+  | "snapshot_stale";
 
 export type OrcsDesktopSnapshotResult =
   | {
